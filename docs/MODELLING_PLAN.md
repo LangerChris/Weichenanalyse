@@ -4,18 +4,24 @@ Stand: 2026-06-15. Lebendes Dokument; wird mit dem Projekt fortgeschrieben.
 
 ## Ziele
 
-**Primärziel (Start):** ein **generelles Fehlschlagen des Umlaufs** pro Weiche aus deren eigener
-Historie vorhersagen/erkennen — ein Score "weicht dieser Umlauf von der Normalhistorie dieser Weiche ab?".
-Später: feinere schwache Labels (DIANA-Diagnosen oder manuell gemeldete Störungsgründe) als zusätzliche
-Validierung/Verfeinerung.
+**Vorhersageziel (festgelegt):** das **Auftreten einer Endlage-Störung** vorhersagen —
+DIANA-Codes **2724 (Störung Endlage Links)** und **2723 (Störung Endlage Rechts)**.
+Framing als **Frühwarnung mit Horizont**: Ziel = „innerhalb der nächsten X Umläufe/Tage tritt
+eine Endlage-Störung auf" (X konfigurierbar). Damit Vorwarnzeit für die Instandhaltung.
 
-Dahinter weiterhin:
-1. **Unüberwachte Anomalieerkennung** auf Motorstrom-Umläufen (pro Umlauf ein Anomalie-Score).
-2. **Predictive Maintenance / Trend** pro Weiche über die Zeit (Degradations-Indikator).
+**Prädiktoren (Eingang), NICHT Ziel:** die übrigen DIANA-Fehlercodes (erhöhter Strom etc.),
+die Motorstrom-Kurvenmerkmale und statische Weichen-Metadaten. Beobachtung in den Daten:
+Endlage-Störungen werden von erhöhten-Strom-Codes (2266, 2626, 2647, 2640) zeitlich angekündigt.
 
 Methodischer Anspruch: **breiter, systematischer Vergleich** klassischer und Deep-Learning-Verfahren
-auf identischer Datenbasis und Evaluation. Alles **konfigurierbar** halten (Fenster, Schwellen, Modelle),
-damit Varianten ausprobiert werden können.
+auf identischer Datenbasis und Evaluation. Alles **konfigurierbar** halten (Horizont, Fenster, Modelle).
+
+### Realität der Datenlage (Stand 4 HARs)
+
+2723/2724 kommen **nur 5×** vor, **alle auf WE438**, geclustert am Historienende; die anderen 3 Weichen: null.
+→ Überwachtes Training/Eval ist auf den aktuellen Daten nicht belastbar. **Strategie:** Framework jetzt bauen
+(Features, Transfer, Leave-one-switch-out-Eval), echtes Training/Eval sobald gezielt HARs von Weichen
+**mit** Endlage-Störungen vorliegen.
 
 ## Unsicherheit & adaptive Warngrenze
 
@@ -24,15 +30,38 @@ Politik: **lieber zu früh warnen als zu spät** (asymmetrisch). Das Modell sch�
 Warngrenze** ab (Baseline ± k·σ, k über die Zeit/Streuung angepasst). So passt sich die Schwelle je Weiche
 eigenständig an deren Rauschniveau an, statt einer festen globalen Grenze.
 
-## Leitprinzip: pro Weiche, nicht zwischen Weichen
+## Leitprinzip: per-Weiche normieren, über Weichen lernen
 
-**Absolute Kennwerte (Peak-Strom, Umlaufzeit) dürfen NIE zwischen Weichen verglichen werden.** Jede Weiche
-hat ihr eigenes legitimes Niveau. Anomalie = Abweichung einer Weiche von ihrer **eigenen Historie/Baseline**.
-Konsequenzen:
-- Baseline pro Weiche **und** Richtung (L/R) aus deren eigener Historie lernen; Scores auf weichen-relativen Residuen.
-- Deskriptive „Peak je Weiche"-Tabellen sind kein Anomalie-Kriterium.
-- Alles muss **vollautomatisch pro Weiche** laufen (Skalierung bis **2260 Weichen** über die DIANA-API; kein manuelles Tuning je Weiche).
-- Leave-one-switch-out ist nur für die Generalisierbarkeit der *Methode* relevant, nicht das eigentliche Ziel.
+Zwei scheinbar gegensätzliche Anforderungen, die zusammen gehören:
+
+1. **Absolute Kennwerte (Peak-Strom, Umlaufzeit) NIE roh zwischen Weichen vergleichen.** Jede Weiche hat ihr
+   eigenes legitimes Niveau. Deshalb: **dynamische Merkmale per-Weiche/Richtung normieren** (Abweichung von der
+   Eigenhistorie, z. B. z-Wert/Residuum). So wird „2 σ über der Eigenhistorie" bei jeder Weiche dasselbe.
+2. **Transfer erwünscht:** Wissen von vielen Weichen soll auf neue Weichen übertragen werden. Das geht, WEIL
+   die dynamischen Merkmale per-Weiche normiert (und damit vergleichbar) sind — **plus statische Weichen-Metadaten**
+   (Standort, Typ, Antrieb …), auf die das Modell konditionieren kann.
+
+Daraus: **Modell über alle Weichen gepoolt** (auf normierten dynamischen + statischen Features), Bewertung per
+**Leave-one-switch-out** → misst echten Transfer auf ungesehene Weichen. Vollautomatisch je Weiche, kein Hand-Tuning.
+
+## Feature-Quellen
+
+**Dynamisch (pro Umlauf, per-Weiche normiert):**
+- Kurvenmerkmale (Peak, Laufphasen-Strom, Energie, Steigung, Umlaufzeit …) → als Residuum zur Eigenhistorie.
+- Aktivität anderer Fehlercodes zuletzt (Rate/Anzahl im jüngsten Fenster) als Vorboten.
+- Zeitlich: kumulative Umlaufzahl (Verschleiß-Proxy), Drift/Trend der Merkmale, Zeit seit letzter Referenzänderung.
+
+**Statisch (pro Weiche, aus `masterdata`/`config` — für Transfer):**
+- **Standort/Hierarchie:** Bezirk, Bahnhof, Gleis.
+- **Weichentyp/Nutzung:** aus `description` (z. B. „ICE-Reinigungsanlage", „ZBA", „Stw").
+- **Antriebs-Konfiguration:** Anzahl/Typ Antriebe (SAT01/SATCD), Heizstäbe (EEH01).
+- **Referenz/Config:** Referenz-Umlaufzeit, Config-Alter (Zeit seit Referenz gesetzt).
+
+> **Leakage-Vorsicht:** DIANAs eigene Schwellwert-Parameter (`configParameter`: 2303/2310/2311) NICHT als
+> Feature verwenden — sie erzeugen die Labels mit.
+
+> **Extraktion nötig:** `extract_har.py` muss um `masterdata` (statische Features) und die ungenutzten
+> pte-/config-Felder (`delayStartTime`, `configTime`/Referenz-`time`) erweitert werden.
 
 ## Datenbasis (siehe CLAUDE.md für Details)
 
@@ -67,7 +96,10 @@ Reproduzierbar als Skripte/`python -m` ausführbar; Notebooks importieren diesel
 - **`isMaintenance`-Umläufe** aus dem „Normal"-Pool ausschließen.
 - **Normalisierung pro Weiche/Richtung**, dann globales Modell auf Residuen (generalisiert auf neue Weichen).
 
-## Track 1 — Anomalieerkennung (Benchmark-Kandidaten)
+## Track 1 — Anomalieerkennung (jetzt als Vorboten-Feature)
+
+> Rolle verschoben: Die Anomalie-Scores sind nicht mehr das Endziel, sondern ein **Vorboten-Feature**
+> für die Endlage-Vorhersage (und weiter nützlich zur unüberwachten Exploration). Kandidaten:
 
 | Klasse | Verfahren |
 |---|---|
@@ -87,11 +119,15 @@ Reproduzierbar als Skripte/`python -m` ausführbar; Notebooks importieren diesel
 
 ## Evaluation
 
-- **Automatisiert, nicht manuell:** Test-/Bewertungs-Set wird aus den schwachen Labels (DIANAs eigene
-  `error_ids` / Diagnosen) automatisch gebildet — das skaliert auf 2260 Weichen und ist reproduzierbar.
-  Kein handverlesenes Test-Set für die allgemeine Evaluation.
-- Metriken pro Weiche und Richtung: ROC-AUC, PR-AUC; Score = Abweichung von der eigenen Baseline.
-- **Gold-Labels (manuell, partiell):** Störungen werden via Excel-Vorlage
+- **Ziel-Label = 2724/2723 im Frühwarn-Horizont:** ein Umlauf ist positiv, wenn innerhalb der nächsten
+  X Umläufe/Tage eine Endlage-Störung folgt (X konfigurierbar).
+- **Negative = zuverlässig:** DIANA überwacht kontinuierlich → Fehlen des Codes gilt als „keine Endlage-Störung".
+  Damit ist eine **überwachte** Bewertung möglich (anders als bei den manuellen Gold-Labels, die PU sind).
+- **Leave-one-switch-out:** Modell auf allen Weichen außer einer trainieren, auf der ausgelassenen bewerten
+  → misst Transfer auf ungesehene Weichen. Metriken: PR-AUC (wegen starkem Klassenungleichgewicht), ROC-AUC,
+  Vorwarnzeit (wie früh vor dem Ereignis geschlagen wird).
+- **Klassenungleichgewicht/Seltenheit** explizit behandeln (PR-AUC statt Accuracy; ggf. Resampling/Gewichte).
+- **Gold-Labels (manuell, partiell):** zusätzlich; Störungen werden via Excel-Vorlage
   (`data/labels/stoerungen_template.xlsx`, erzeugt von `scripts/make_label_template.py`) geliefert.
   → **Partielle Positive (PU-Setting):** gemeldete Störungen sind sichere Treffer; ein fehlender Eintrag
   bedeutet NICHT "gesund" (es gibt unbekannte Störungen). Daher: gemeldete Labels nur als Positive werten,
@@ -121,8 +157,10 @@ Ziel: diese Abweichungen unüberwacht und *früher* als DIANAs Schwellwert-Diagn
 - [x] **Baseline-Detektor** (`baseline.py`, Per-Weiche-Schwerpunkt) + Testdurchlauf (`scripts/run_baseline.py`)
       → erster Befund: Gesamt-AUC ~0.58 (schwach, erwartbar). Ursache: hohe Kontamination (56 % Fehler)
       verzerrt den Schwerpunkt; durchgehend defekte Weichen (WE153) haben keine saubere Eigen-Referenz.
-- [ ] **Robustere Baseline** (Median/MAD statt Mittel; nur "frühe gesunde" Historie als Referenz) ← nächster Schritt
-- [ ] Klassische Detektoren (Isolation Forest, PCA/T²)
-- [ ] PCA/Autoencoder
-- [ ] Benchmark-Vergleich
-- [ ] Track 2: Trend/Predictive Maintenance
+- [x] **Datenanalyse Zielcodes 2723/2724** → nur 5 Positive (alle WE438), Vorboten = Strom-Codes
+- [ ] **`extract_har.py` erweitern**: `masterdata` (statische Features) + ungenutzte pte/config-Felder ← nächster Schritt
+- [ ] **Feature-Engineering**: dynamische (per-Weiche normierte) + statische Features, Frühwarn-Label mit Horizont
+- [ ] **Transfer-Setup**: gepooltes Modell + Leave-one-switch-out-Evaluation (PR-AUC, Vorwarnzeit)
+- [ ] Modellvergleich klassisch vs. Deep auf der Vorhersageaufgabe
+- [ ] Echtes Training/Eval, sobald HARs von Weichen MIT Endlage-Störungen vorliegen
+- [ ] (parallel) robustere unüberwachte Baseline als Vorboten-Feature
