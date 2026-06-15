@@ -1,3 +1,15 @@
 .DS_store
-CLAUDE.md
 *.har
+
+# Python
+__pycache__/
+*.pyc
+
+# Abgeleitete Extraktions-Outputs (aus HAR erzeugt, nicht versionieren)
+data/pointturn_data.parquet
+data/*_currents.json
+data/*_diagnoses.csv
+
+# Ausgefüllte Label-Dateien des Nutzers (Templates bleiben versioniert)
+data/labels/stoerungen.xlsx
+data/reference/error_codes.csv

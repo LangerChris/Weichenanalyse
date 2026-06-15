@@ -16,8 +16,13 @@ from datetime import datetime, timezone
 
 def parse_har(har_path: Path) -> dict:
     """Parse a single HAR file and return pointturn + diagnosis data."""
-    with open(har_path) as f:
-        har = json.load(f)
+    # HAR exports are UTF-8; Windows would otherwise default to cp1252 and crash.
+    try:
+        with open(har_path, encoding="utf-8") as f:
+            har = json.load(f)
+    except UnicodeDecodeError:
+        with open(har_path, encoding="utf-8-sig") as f:
+            har = json.load(f)
 
     turns = []
     diagnoses = []
@@ -146,6 +151,10 @@ def print_summary(all_turns: list, all_diagnoses: list, har_files: list):
 
 
 def main():
+    # Windows consoles default to cp1252 and choke on non-latin1 output (e.g. "→").
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
     parser = argparse.ArgumentParser(description="Extract DIANA point turn data from HAR files")
     parser.add_argument("paths", nargs="+", help="HAR file(s) or directory containing them")
     parser.add_argument("--output", "-o", default="pointturn_data.parquet",
