@@ -16,7 +16,19 @@ Endlage-Störungen werden von erhöhten-Strom-Codes (2266, 2626, 2647, 2640) zei
 Methodischer Anspruch: **breiter, systematischer Vergleich** klassischer und Deep-Learning-Verfahren
 auf identischer Datenbasis und Evaluation. Alles **konfigurierbar** halten (Horizont, Fenster, Modelle).
 
-### Realität der Datenlage (Stand 4 HARs)
+### Scope-Entscheidungen (2026-06-15)
+
+- **Nur graduelle Verschleißfehler sind vorwarnbar.** Empirie: der **Mittelstrom** kündigt Endlage-Störungen
+  an (kriecht ~2–3 σ über ~10 Umläufe hoch), der **Peak-Strom nicht**. Abrupte Fehler (z. B. Stein im
+  Weichenbett) haben keinen graduellen Vorboten → **aus der Vorhersage ausgeklammert** (als nicht-vorhersagbar
+  dokumentiert). Die Excel-Vorlage hat dafür eine Spalte `Verlauf` (graduell/abrupt).
+- **Warnlogik = Persistenz** (vom Autor vorgegeben, `warning.py`): Warnung, wenn die Stromstärke relativ zur
+  Eigen-Baseline über ≥ `min_consecutive` Umläufe in Folge erhöht ist. Mittelstrom als Default-Vorbote;
+  Umlaufzeit-Änderung als zweiter Kandidat (braucht robuste Skalierung).
+- **Nächster Engpass = Daten:** Störfall-HARs sind kurze Fenster, Ereignis oft sehr früh → wenig Baseline +
+  Vorlauf. Bevor das Modell ausgebaut wird, **breitere HAR-Fenster VOR den Vorfällen** sammeln.
+
+### Realität der Datenlage (historisch, Stand 4 HARs)
 
 2723/2724 kommen **nur 5×** vor, **alle auf WE438**, geclustert am Historienende; die anderen 3 Weichen: null.
 → Überwachtes Training/Eval ist auf den aktuellen Daten nicht belastbar. **Strategie:** Framework jetzt bauen
@@ -162,7 +174,9 @@ Ziel: diese Abweichungen unüberwacht und *früher* als DIANAs Schwellwert-Diagn
 - [x] **Gold-Labels eingepflegt**: 12 bestätigte Störungen + Fehlercode-Beschreibungen; Endlage-Fälle
       richten sich eng an 2723/2724 aus (validiert)
 - [x] **`labels.py`**: Zielcodes, Frühwarn-Label mit Horizont, Switch-Metadaten, bestätigte Störungen
-- [ ] **Feature-Engineering**: dynamische (per-Weiche normierte) + statische Features → modellfertige Tabelle ← nächster Schritt
+- [x] **`warning.py`**: Persistenz-Vorwarnung; Befund Mittelstrom=Vorbote, Peak nicht; abrupte Fehler ausgeklammert
+- [ ] **Mehr Historie sammeln** (Nutzer): breitere HAR-Fenster VOR den Vorfällen ← aktueller Engpass
+- [ ] **Feature-Engineering**: dynamische (per-Weiche normierte, inkl. Umlaufzeit) + statische Features
 - [ ] **Transfer-Setup**: gepooltes Modell + Leave-one-switch-out-Evaluation (PR-AUC, Vorwarnzeit)
 - [ ] Modellvergleich klassisch vs. Deep auf der Vorhersageaufgabe
 - [ ] (parallel) robustere unüberwachte Baseline als Vorboten-Feature

@@ -37,6 +37,8 @@ FEHLERARTEN = [
 RICHTUNG = ["L", "R", "beide", "unbekannt"]
 SCHWEREGRAD = ["Warnung", "Störung", "Ausfall", "unbekannt"]
 SICHERHEIT = ["bestätigt", "vermutet"]
+# Verlauf: entscheidet, ob eine Vorwarnung überhaupt möglich ist (nur graduelle Fehler).
+VERLAUF = ["graduell", "abrupt", "unbekannt"]
 
 HEADER_FILL = PatternFill("solid", fgColor="1F4E78")
 HEADER_FONT = Font(bold=True, color="FFFFFF")
@@ -50,6 +52,7 @@ STOERUNG_COLS = [
     ("Datum_Reparatur", 16, False, "Wann behoben/repariert (falls bekannt)"),
     ("Richtung", 12, False, "L, R, beide oder unbekannt"),
     ("Fehlerart", 30, True, "Kategorie (Dropdown) oder frei"),
+    ("Verlauf", 12, False, "graduell (langsam) oder abrupt (plötzlich) — abrupte sind nicht vorwarnbar"),
     ("Komponente", 22, False, "z.B. Antrieb SAT01, falls bekannt"),
     ("Schweregrad", 14, False, "Warnung / Störung / Ausfall"),
     ("Sicherheit", 14, True, "bestätigt oder vermutet"),
@@ -126,11 +129,13 @@ def build_workbook() -> Workbook:
     # --- Sheet 2: Stoerungen ---
     ws2 = wb.create_sheet("Stoerungen")
     _style_header(ws2, STOERUNG_COLS)
-    # Dropdowns: Richtung(E), Fehlerart(F), Schweregrad(H), Sicherheit(I)
-    _add_dropdown(ws2, "E", RICHTUNG)
-    _add_dropdown(ws2, "F", FEHLERARTEN)
-    _add_dropdown(ws2, "H", SCHWEREGRAD)
-    _add_dropdown(ws2, "I", SICHERHEIT)
+    # Dropdowns anhand des Spaltennamens (robust gegen Spaltenverschiebung)
+    col_of = {name: get_column_letter(i)
+              for i, (name, *_rest) in enumerate(STOERUNG_COLS, start=1)}
+    for name, options in [("Richtung", RICHTUNG), ("Fehlerart", FEHLERARTEN),
+                          ("Verlauf", VERLAUF), ("Schweregrad", SCHWEREGRAD),
+                          ("Sicherheit", SICHERHEIT)]:
+        _add_dropdown(ws2, col_of[name], options)
 
     # --- Sheet 3: Gesund_bestaetigt ---
     ws3 = wb.create_sheet("Gesund_bestaetigt")
