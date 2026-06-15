@@ -9,6 +9,7 @@ __pycache__/
 data/pointturn_data.parquet
 data/*_currents.json
 data/*_diagnoses.csv
+data/*_switches.csv
 
 # Ausgefüllte Label-Dateien des Nutzers (Templates bleiben versioniert)
 data/labels/stoerungen.xlsx

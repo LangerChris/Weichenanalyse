@@ -10,8 +10,47 @@ Usage:
 import json
 import argparse
 import sys
+from collections import defaultdict
 from pathlib import Path
 from datetime import datetime, timezone
+
+
+def build_switches(records: list, har_file: str) -> list:
+    """Aus den masterdata-Komponenten je Weiche eine statische Feature-Zeile bauen.
+
+    Liefert Standort/Hierarchie, Weichentyp (aus Beschreibung), Antriebs-Konfiguration
+    (SAT01/SATCD ...) und Heizung (EEH) — Transfer-Features für die Vorhersage.
+    """
+    by_oid = defaultdict(list)
+    for r in records:
+        if r.get("objectId"):
+            by_oid[r["objectId"]].append(r)
+
+    out = []
+    for oid, recs in by_oid.items():
+        comp2000 = next((r for r in recs if r.get("componentId") == 2000), {})
+        org = next((r["indices"]["org"] for r in recs
+                    if (r.get("indices") or {}).get("org")), {})
+        discs = sorted({r.get("componentDiscriminator") for r in recs
+                        if r.get("componentDiscriminator")})
+        drives = [d for d in discs if d.startswith("SAT")]
+        tracks = sorted({t for r in recs for t in (r.get("tracks") or [])})
+        out.append({
+            "object_id": oid,
+            "har_file": har_file,
+            "label": comp2000.get("label") or (recs[0].get("label", "")),
+            "description": comp2000.get("description", ""),
+            "district": next((r.get("district") for r in recs if r.get("district")), ""),
+            "region": org.get("h1", {}).get("name", ""),
+            "area": org.get("h2", {}).get("name", ""),
+            "subarea": org.get("h3", {}).get("name", ""),
+            "station": org.get("h4", {}).get("name", ""),
+            "tracks": ",".join(map(str, tracks)),
+            "drives": ",".join(drives),
+            "n_drives": len(drives),
+            "has_heater": any(d.startswith("EEH") for d in discs),
+        })
+    return out
 
 
 def parse_har(har_path: Path) -> dict:
@@ -26,6 +65,7 @@ def parse_har(har_path: Path) -> dict:
 
     turns = []
     diagnoses = []
+    masterdata_records = []
 
     for entry in har["log"]["entries"]:
         url = entry["request"]["url"]
@@ -55,6 +95,7 @@ def parse_har(har_path: Path) -> dict:
                         motor_summary[f"motor_{i}_peak_current"] = max(curr)
                         motor_summary[f"motor_{i}_mean_current"] = sum(curr) / len(curr)
                         motor_summary[f"motor_{i}_samples"] = len(curr)
+                        motor_summary[f"motor_{i}_delay_start"] = m.get("delayStartTime")
                     # Store raw current for model training
                     motor_summary[f"motor_{i}_current_raw"] = curr
                     motor_summary[f"motor_{i}_power_raw"] = m.get("power", [])
@@ -80,6 +121,8 @@ def parse_har(har_path: Path) -> dict:
                     "position": pos,
                     "turn_time": p.get("turnTime"),
                     "ref_turn_time": ref.get("turnTime"),
+                    "reference_time": ref.get("time"),       # wann Referenz gesetzt wurde
+                    "config_time": ref_config.get("configTime"),  # wann Config zuletzt geändert
                     "sampling_interval": p.get("samplingInterval"),
                     "is_maintenance": p.get("isMaintenance", False),
                     "temperature_air": p.get("temperatureAir"),
@@ -107,7 +150,17 @@ def parse_har(har_path: Path) -> dict:
                     "time": d.get("time"),
                 })
 
-    return {"turns": turns, "diagnoses": diagnoses}
+        # --- Master data (static switch metadata) ---
+        elif "/masterdata/" in url:
+            try:
+                data = json.loads(resp_text)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(data, list):
+                masterdata_records.extend(data)
+
+    switches = build_switches(masterdata_records, har_path.name)
+    return {"turns": turns, "diagnoses": diagnoses, "switches": switches}
 
 
 def print_summary(all_turns: list, all_diagnoses: list, har_files: list):
@@ -178,10 +231,12 @@ def main():
     # Extract
     all_turns = []
     all_diagnoses = []
+    all_switches = []
     for hf in har_files:
         result = parse_har(hf)
         all_turns.extend(result["turns"])
         all_diagnoses.extend(result["diagnoses"])
+        all_switches.extend(result["switches"])
 
     # Summary
     print_summary(all_turns, all_diagnoses, har_files)
@@ -245,6 +300,14 @@ def main():
         diag_path = output_path.with_name(output_path.stem + "_diagnoses.csv")
         pd.DataFrame(all_diagnoses).to_csv(diag_path, index=False)
         print(f"  Diagnoses saved to: {diag_path}")
+
+    # Static switch metadata table (one row per switch)
+    if all_switches:
+        sw_path = output_path.with_name(output_path.stem + "_switches.csv")
+        df_sw = pd.DataFrame(all_switches).drop_duplicates("object_id")
+        df_sw.to_csv(sw_path, index=False)
+        print(f"  Switch metadata saved to: {sw_path}")
+        print(f"  Switches: {df_sw.shape[0]}  Columns: {list(df_sw.columns)}")
 
 
 if __name__ == "__main__":
