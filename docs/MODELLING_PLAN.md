@@ -157,10 +157,12 @@ Ziel: diese Abweichungen unüberwacht und *früher* als DIANAs Schwellwert-Diagn
 - [x] **Baseline-Detektor** (`baseline.py`, Per-Weiche-Schwerpunkt) + Testdurchlauf (`scripts/run_baseline.py`)
       → erster Befund: Gesamt-AUC ~0.58 (schwach, erwartbar). Ursache: hohe Kontamination (56 % Fehler)
       verzerrt den Schwerpunkt; durchgehend defekte Weichen (WE153) haben keine saubere Eigen-Referenz.
-- [x] **Datenanalyse Zielcodes 2723/2724** → nur 5 Positive (alle WE438), Vorboten = Strom-Codes
-- [ ] **`extract_har.py` erweitern**: `masterdata` (statische Features) + ungenutzte pte/config-Felder ← nächster Schritt
-- [ ] **Feature-Engineering**: dynamische (per-Weiche normierte) + statische Features, Frühwarn-Label mit Horizont
+- [x] **`extract_har.py` erweitert**: `masterdata` (statische Features) + Config-Alter + delayStartTime
+- [x] **Datensatz gewachsen**: 24 Weichen, 12.500 Umläufe, 86 Ziel-Umläufe auf 20 Weichen
+- [x] **Gold-Labels eingepflegt**: 12 bestätigte Störungen + Fehlercode-Beschreibungen; Endlage-Fälle
+      richten sich eng an 2723/2724 aus (validiert)
+- [x] **`labels.py`**: Zielcodes, Frühwarn-Label mit Horizont, Switch-Metadaten, bestätigte Störungen
+- [ ] **Feature-Engineering**: dynamische (per-Weiche normierte) + statische Features → modellfertige Tabelle ← nächster Schritt
 - [ ] **Transfer-Setup**: gepooltes Modell + Leave-one-switch-out-Evaluation (PR-AUC, Vorwarnzeit)
 - [ ] Modellvergleich klassisch vs. Deep auf der Vorhersageaufgabe
-- [ ] Echtes Training/Eval, sobald HARs von Weichen MIT Endlage-Störungen vorliegen
 - [ ] (parallel) robustere unüberwachte Baseline als Vorboten-Feature
