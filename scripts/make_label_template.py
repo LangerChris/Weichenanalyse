@@ -39,6 +39,8 @@ SCHWEREGRAD = ["Warnung", "Störung", "Ausfall", "unbekannt"]
 SICHERHEIT = ["bestätigt", "vermutet"]
 # Verlauf: entscheidet, ob eine Vorwarnung überhaupt möglich ist (nur graduelle Fehler).
 VERLAUF = ["graduell", "abrupt", "unbekannt"]
+# Ursache: turnusmäßige Inspektions-Tausche sind KEIN Verschleiß → aus Analyse ausschließen.
+URSACHE = ["Verschleiß", "Inspektion", "unbekannt"]
 
 HEADER_FILL = PatternFill("solid", fgColor="1F4E78")
 HEADER_FONT = Font(bold=True, color="FFFFFF")
@@ -53,6 +55,7 @@ STOERUNG_COLS = [
     ("Richtung", 12, False, "L, R, beide oder unbekannt"),
     ("Fehlerart", 30, True, "Kategorie (Dropdown) oder frei"),
     ("Verlauf", 12, False, "graduell (langsam) oder abrupt (plötzlich) — abrupte sind nicht vorwarnbar"),
+    ("Ursache", 12, False, "Verschleiß oder Inspektion (Routine-Tausch) — Inspektion wird ausgeschlossen"),
     ("Komponente", 22, False, "z.B. Antrieb SAT01, falls bekannt"),
     ("Schweregrad", 14, False, "Warnung / Störung / Ausfall"),
     ("Sicherheit", 14, True, "bestätigt oder vermutet"),
@@ -133,8 +136,8 @@ def build_workbook() -> Workbook:
     col_of = {name: get_column_letter(i)
               for i, (name, *_rest) in enumerate(STOERUNG_COLS, start=1)}
     for name, options in [("Richtung", RICHTUNG), ("Fehlerart", FEHLERARTEN),
-                          ("Verlauf", VERLAUF), ("Schweregrad", SCHWEREGRAD),
-                          ("Sicherheit", SICHERHEIT)]:
+                          ("Verlauf", VERLAUF), ("Ursache", URSACHE),
+                          ("Schweregrad", SCHWEREGRAD), ("Sicherheit", SICHERHEIT)]:
         _add_dropdown(ws2, col_of[name], options)
 
     # --- Sheet 3: Gesund_bestaetigt ---

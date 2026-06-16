@@ -93,21 +93,30 @@ def load_confirmed_faults(
     wb = load_workbook(xlsx, read_only=True, data_only=True)
     ws = wb["Stoerungen"]
     rows = list(ws.iter_rows(values_only=True))
-    # Zeile 0 = Header, Zeile 1 = Hinweise → Daten ab Zeile 2
+    # Header-basiert einlesen (robust gegen neue/verschobene Spalten).
+    header = [str(h).strip() if h is not None else "" for h in rows[0]]
+    col = {name: i for i, name in enumerate(header)}
+
+    def val(r, name):
+        i = col.get(name)
+        return r[i] if i is not None and i < len(r) else None
+
     records = []
-    for r in rows[2:]:
+    for r in rows[2:]:  # Zeile 0 = Header, Zeile 1 = Hinweise
         if not r or not r[0] or "Dateiname" in str(r[0]):
             continue
         records.append({
             "har_key": str(r[0]).replace(".har", "").strip(),
-            "weiche": r[1],
-            "datum_beginn": r[2],
-            "datum_reparatur": r[3],
-            "richtung": r[4],
-            "fehlerart": r[5],
-            "schweregrad": r[7],
-            "sicherheit": r[8],
-            "notiz": r[10],
+            "weiche": val(r, "Weiche"),
+            "datum_beginn": val(r, "Datum_Beginn"),
+            "datum_reparatur": val(r, "Datum_Reparatur"),
+            "richtung": val(r, "Richtung"),
+            "fehlerart": val(r, "Fehlerart"),
+            "verlauf": val(r, "Verlauf"),
+            "ursache": val(r, "Ursache"),  # Verschleiß vs. Inspektion (Routine-Tausch)
+            "schweregrad": val(r, "Schweregrad"),
+            "sicherheit": val(r, "Sicherheit"),
+            "notiz": val(r, "Notizen"),
         })
     faults = pd.DataFrame(records)
     if faults.empty:

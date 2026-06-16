@@ -63,6 +63,11 @@ def main():
     faults["fd"] = pd.to_datetime(faults["datum_beginn"])
     faults["cat"] = faults["notiz"].apply(categorize_fault)
     faults = faults[faults.cat != "Stein"]  # abrupt raus
+    if "ursache" in faults.columns:        # turnusmäßige Inspektions-Tausche raus
+        before = len(faults)
+        faults = faults[faults["ursache"].astype(str).str.lower() != "inspektion"]
+        if before - len(faults):
+            print(f"(Inspektions-Tausche ausgeschlossen: {before - len(faults)})")
     if args.predictable_only:
         faults = faults[faults.cat.isin(PREDICTABLE_TYPES)]
     faults = faults[faults.object_id.notna() & faults.fd.notna()].drop_duplicates("object_id")
