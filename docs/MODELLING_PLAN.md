@@ -175,8 +175,11 @@ Ziel: diese Abweichungen unüberwacht und *früher* als DIANAs Schwellwert-Diagn
       richten sich eng an 2723/2724 aus (validiert)
 - [x] **`labels.py`**: Zielcodes, Frühwarn-Label mit Horizont, Switch-Metadaten, bestätigte Störungen
 - [x] **`warning.py`**: Persistenz-Vorwarnung; Befund Mittelstrom=Vorbote, Peak nicht; abrupte Fehler ausgeklammert
-- [ ] **Mehr Historie sammeln** (Nutzer): breitere HAR-Fenster VOR den Vorfällen ← aktueller Engpass
-- [ ] **Feature-Engineering**: dynamische (per-Weiche normierte, inkl. Umlaufzeit) + statische Features
-- [ ] **Transfer-Setup**: gepooltes Modell + Leave-one-switch-out-Evaluation (PR-AUC, Vorwarnzeit)
-- [ ] Modellvergleich klassisch vs. Deep auf der Vorhersageaufgabe
-- [ ] (parallel) robustere unüberwachte Baseline als Vorboten-Feature
+- [x] **Leistungssignal + `shape.py` + `EnsembleWarning`**: Strom ODER Leistung, Form-Warner, ODER-verknüpft;
+      Debounce (`alarm_active` tail). Stand: 33 Weichen; Recall graduelle Störungen 14/18 bei 0 Fehlalarmen
+      (z=1.5/min=3/tail=40) bzw. 18/18 mit 2 vereinzelten Blips. Eval: `scripts/eval_warning.py`.
+- [ ] **Saubere Leave-one-switch-out-Validierung des Warners** ← nächster Schritt (Schwellen werden aktuell auf
+      denselben 18 Fällen getunt → optimistisch verzerrt; LOSO macht die Zahlen generalisierbar)
+- [ ] **Lerndes Transfer-Modell**: Warner-Signale + statische Metadaten gepoolt lernen, LOSO; schlägt es die Handregel?
+- [ ] Pro-Fehlertyp-Analyse + Vorwarnzeit-Verteilungen (Thesis-Material)
+- [ ] Modellvergleich klassisch vs. Deep
