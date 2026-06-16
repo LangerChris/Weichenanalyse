@@ -26,7 +26,8 @@ from openpyxl import load_workbook
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.metrics import roc_auc_score
 
-from weichenanalyse.labels import DEFAULT_META, load_confirmed_faults, load_switches
+from weichenanalyse.labels import (DEFAULT_META, PREDICTABLE_TYPES, categorize_fault,
+                                   load_confirmed_faults, load_switches)
 from weichenanalyse.model import FEATURE_COLS, assemble_features
 
 
@@ -51,6 +52,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--horizon-days", type=int, default=30)
     ap.add_argument("--k", type=int, default=5, help="Glättungsfenster (Persistenz)")
+    ap.add_argument("--predictable-only", action="store_true",
+                    help="nur vorhersagbare Fehlerfamilie (Verschluss/Gestaenge/ELP/Schmierung)")
     args = ap.parse_args()
 
     feats = assemble_features()
@@ -58,9 +61,13 @@ def main():
     healthy = set(healthy_object_ids(switches))
     faults = load_confirmed_faults()
     faults["fd"] = pd.to_datetime(faults["datum_beginn"])
-    faults = faults[~faults["notiz"].astype(str).str.contains("Stein", na=False)]
+    faults["cat"] = faults["notiz"].apply(categorize_fault)
+    faults = faults[faults.cat != "Stein"]  # abrupt raus
+    if args.predictable_only:
+        faults = faults[faults.cat.isin(PREDICTABLE_TYPES)]
     faults = faults[faults.object_id.notna() & faults.fd.notna()].drop_duplicates("object_id")
     fault_fd = dict(zip(faults.object_id, faults.fd))
+    fault_cat = dict(zip(faults.object_id, faults.cat))
 
     labeled = set(fault_fd) | healthy
     df = feats[feats.object_id.isin(labeled)].copy()
@@ -106,20 +113,29 @@ def main():
         if mask.sum() == 0:
             continue
         score, order, roll = rolling_max(prob[mask], g.dt.to_numpy()[mask], args.k)
-        rows.append({"object_id": s, "is_fault": is_fault, "score": score})
+        rows.append({"object_id": s, "is_fault": is_fault, "score": score,
+                     "cat": fault_cat.get(s, "gesund")})
 
     res = pd.DataFrame(rows)
     yv = res.is_fault.astype(int).to_numpy()
     auc = roc_auc_score(yv, res.score.to_numpy())
-    print(f"=== Lernendes Modell, LOSO (horizon={args.horizon_days}d, k={args.k}) ===")
+    scope = "vorhersagbare Familie" if args.predictable_only else "alle graduellen"
+    print(f"=== Lernendes Modell, LOSO ({scope}; horizon={args.horizon_days}d, k={args.k}) ===")
     print(f"Weichen: {int(yv.sum())} Störungen + {int((1-yv).sum())} gesund")
     print(f"Switch-Level ROC-AUC (Störung vs. gesund): {auc:.3f}\n")
-    print(f"{'Schwelle':>8} {'Recall':>8} {'Fehlalarm':>10}")
-    for thr in np.quantile(res.score, [0.5, 0.6, 0.7, 0.8, 0.9]):
-        rec = res[(res.is_fault) & (res.score >= thr)].shape[0] / max(yv.sum(), 1)
-        fa = res[(~res.is_fault) & (res.score >= thr)].shape[0] / max((1 - yv).sum(), 1)
-        print(f"{thr:8.3f} {rec:8.0%} {fa:10.0%}")
-    print("\nBaseline (Handregel, LOSO): Recall 52% / Fehlalarm 61%")
+
+    # Operating point: Schwelle bei ~20% Fehlalarm
+    fa_target = np.quantile(res[~res.is_fault].score, 0.80)
+    rec = res[(res.is_fault) & (res.score >= fa_target)].shape[0] / max(yv.sum(), 1)
+    fa = res[(~res.is_fault) & (res.score >= fa_target)].shape[0] / max((1 - yv).sum(), 1)
+    print(f"Betriebspunkt (~20% Fehlalarm): Recall {rec:.0%}, Fehlalarm {fa:.0%}\n")
+
+    print("Recall je Fehlertyp an diesem Betriebspunkt:")
+    fr = res[res.is_fault]
+    for cat, g in fr.groupby("cat"):
+        det = (g.score >= fa_target).sum()
+        print(f"  {cat:12s} {det}/{len(g)} erkannt")
+    print("\nBaseline (Handregel, LOSO, alle graduellen): Recall 52% / Fehlalarm 61%")
 
 
 if __name__ == "__main__":

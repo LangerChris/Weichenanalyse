@@ -28,9 +28,13 @@ _MAD_TO_STD = 1.4826
 DYN_FEATURES = ["mean_amp", "peak_amp", "turn_time", *SHAPE_COLS]
 # Resultierende Modell-Spalten.
 Z_COLS = [f"z_{f}" for f in DYN_FEATURES]
-PERSIST_COLS = ["run_len_amp", "roll_z_amp", "roll_z_energy"]
-STATIC_COLS = ["n_drives", "has_heater", "signal_W"]
-FEATURE_COLS = Z_COLS + PERSIST_COLS + STATIC_COLS
+# Persistenz/Trend — Schwerpunkt auf der Umlaufzeit (laut Feature-Importance das Signal).
+PERSIST_COLS = [
+    "run_len_amp", "roll_z_amp", "roll_z_energy",
+    "roll_z_tt", "run_len_tt", "frac_short_tt",
+]
+# Statische Metadaten bewusst WEGGELASSEN: bei ~48 Weichen Scheinkorrelation/Identitäts-Leakage.
+FEATURE_COLS = Z_COLS + PERSIST_COLS
 
 
 def _per_switch_z(g: pd.DataFrame, feature: str, baseline_turns: int) -> np.ndarray:
@@ -68,6 +72,19 @@ def assemble_features(meta_path: Path | str = DEFAULT_META, baseline_turns: int 
         g["run_len_amp"] = run
         g["roll_z_amp"] = g["z_mean_amp"].rolling(5, min_periods=1).mean().to_numpy()
         g["roll_z_energy"] = g["z_shape_energy"].rolling(5, min_periods=1).mean().to_numpy()
+
+        # Umlaufzeit-Dynamik (dominantes Signal): geglätteter Trend, Lauflänge auffälliger
+        # Umlaufzeit und Anteil VERKÜRZTER Umläufe ("Umlaufzeit zu kurz" = Endlage-nah).
+        ztt = g["z_turn_time"]
+        g["roll_z_tt"] = ztt.rolling(5, min_periods=1).mean().to_numpy()
+        tt_dev = (ztt.abs() > 1.0).to_numpy()
+        run_tt = np.zeros(len(g), dtype=int)
+        c = 0
+        for i, e in enumerate(tt_dev):
+            c = c + 1 if e else 0
+            run_tt[i] = c
+        g["run_len_tt"] = run_tt
+        g["frac_short_tt"] = (ztt < -1.0).rolling(10, min_periods=1).mean().to_numpy()
         parts.append(g)
 
     out = pd.concat(parts, ignore_index=True)

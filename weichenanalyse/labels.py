@@ -19,6 +19,29 @@ from weichenanalyse.data import DEFAULT_META, load_meta
 TARGET_CODES = (2723, 2724)  # 2723 = Endlage R, 2724 = Endlage L
 GROUP_KEYS = ["object_id", "position"]
 
+# Mechanisch gradueller, endlage-naher Fehler → potenziell vorhersagbar.
+PREDICTABLE_TYPES = ("Verschluss", "Gestaenge", "ELP", "Schmierung")
+
+
+def categorize_fault(notiz: str) -> str:
+    """Fehlerart aus dem Freitext der bestätigten Störung ableiten."""
+    n = str(notiz).lower()
+    if "stein" in n:
+        return "Stein"                  # abrupt (Fremdkörper) → nicht vorhersagbar
+    if "geschmiert" in n or "schmier" in n:
+        return "Schmierung"             # Schwergang, durch Schmierung behoben
+    if "verschluss" in n:
+        return "Verschluss"
+    if "kupplung" in n:
+        return "Kupplung"               # Stellkraft/Reibung → schwer vorhersagbar
+    if "stange" in n or "gestänge" in n or "gestaenge" in n:
+        return "Gestaenge"
+    if "endlagen" in n or "elp" in n:
+        return "ELP"                    # Endlagenprüfer
+    if "antrieb" in n:
+        return "Antrieb"
+    return "sonst"
+
 
 def _switches_path(meta_path: Path) -> Path:
     return meta_path.with_name(meta_path.stem + "_switches.csv")
