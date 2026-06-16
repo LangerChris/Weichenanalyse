@@ -178,8 +178,11 @@ Ziel: diese Abweichungen unüberwacht und *früher* als DIANAs Schwellwert-Diagn
 - [x] **Leistungssignal + `shape.py` + `EnsembleWarning`**: Strom ODER Leistung, Form-Warner, ODER-verknüpft;
       Debounce (`alarm_active` tail). Stand: 33 Weichen; Recall graduelle Störungen 14/18 bei 0 Fehlalarmen
       (z=1.5/min=3/tail=40) bzw. 18/18 mit 2 vereinzelten Blips. Eval: `scripts/eval_warning.py`.
-- [ ] **Saubere Leave-one-switch-out-Validierung des Warners** ← nächster Schritt (Schwellen werden aktuell auf
-      denselben 18 Fällen getunt → optimistisch verzerrt; LOSO macht die Zahlen generalisierbar)
-- [ ] **Lerndes Transfer-Modell**: Warner-Signale + statische Metadaten gepoolt lernen, LOSO; schlägt es die Handregel?
-- [ ] Pro-Fehlertyp-Analyse + Vorwarnzeit-Verteilungen (Thesis-Material)
-- [ ] Modellvergleich klassisch vs. Deep
+- [x] **Leave-one-switch-out-Validierung des Warners** (`scripts/loso_warning.py`): ehrlich Recall 52 % /
+      Fehlalarm 61 % (60 Weichen, 25 Störungen + 23 gesund) → Handregel generalisiert schlecht (ODER addiert Fehlalarme)
+- [x] **Lernendes Transfer-Modell** (`model.py` + `loso_model.py`): LOSO ROC-AUC **0.62**, schlägt Handregel
+      (56 %/43 %). Wichtigstes Merkmal **z_turn_time** (Umlaufzeit), nicht Amplitude. Statische Metadaten = Scheinkorrelations-Risiko.
+- [ ] **Modell verbessern** ← nächster Schritt: turn-time-Features ausbauen, statische Metadaten raus,
+      Horizont-Tuning, Pro-Fehlertyp-Analyse (welche Typen sind überhaupt warnbar?)
+- [ ] Modellvergleich klassisch vs. Deep (z.B. 1D-CNN auf der Rohkurve)
+- [ ] Mehr/saubere Daten bleibt größter Hebel (mehr Störungen je Typ, breitere Vorlauf-Fenster)
