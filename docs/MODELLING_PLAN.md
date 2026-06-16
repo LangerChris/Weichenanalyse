@@ -182,7 +182,11 @@ Ziel: diese Abweichungen unüberwacht und *früher* als DIANAs Schwellwert-Diagn
       Fehlalarm 61 % (60 Weichen, 25 Störungen + 23 gesund) → Handregel generalisiert schlecht (ODER addiert Fehlalarme)
 - [x] **Lernendes Transfer-Modell** (`model.py` + `loso_model.py`): LOSO ROC-AUC **0.62**, schlägt Handregel
       (56 %/43 %). Wichtigstes Merkmal **z_turn_time** (Umlaufzeit), nicht Amplitude. Statische Metadaten = Scheinkorrelations-Risiko.
-- [ ] **Modell verbessern** ← nächster Schritt: turn-time-Features ausbauen, statische Metadaten raus,
-      Horizont-Tuning, Pro-Fehlertyp-Analyse (welche Typen sind überhaupt warnbar?)
-- [ ] Modellvergleich klassisch vs. Deep (z.B. 1D-CNN auf der Rohkurve)
-- [ ] Mehr/saubere Daten bleibt größter Hebel (mehr Störungen je Typ, breitere Vorlauf-Fenster)
+- [x] **Modell bereinigt**: statische Metadaten raus, Umlaufzeit-Dynamik rein → AUC 0.73; Horizont flach (60T best);
+      `random_state` fixiert. Pro-Typ: Schmierung/ELP gut, Verschluss/Kupplung schlecht.
+- [x] **Routine-Tausche ausgeschlossen** (Excel-Spalte `Ursache`=Inspektion): 3 Verschluss-Fälle raus →
+      AUC **0.79** (vorhersagbare Familie), 67 % Recall @20 % FA. Label-Qualität = großer Hebel.
+- [ ] **Verschluss-Befund vertiefen**: erkennt Modell die 2 echten Verschleißfälle nicht trotz Rohsignal
+      (heterogene Signaturen, n=2)? → per-Typ-Modell oder mehr Verschluss-Verschleißfälle
+- [ ] Modellvergleich klassisch vs. Deep (1D-CNN auf der Rohkurve) ← Kandidat für nächsten Schritt
+- [ ] Mehr/saubere Daten bleibt größter Hebel (mehr echte Verschleißfälle je Typ, breitere Vorlauf-Fenster)
