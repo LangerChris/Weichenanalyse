@@ -105,7 +105,8 @@ def main():
         # Balanciertes Sample-Gewicht
         w = np.where(ytr == 1, (ytr == 0).sum() / max((ytr == 1).sum(), 1), 1.0)
         clf = HistGradientBoostingClassifier(max_depth=3, learning_rate=0.1,
-                                             max_iter=200, l2_regularization=1.0)
+                                             max_iter=200, l2_regularization=1.0,
+                                             random_state=0)
         clf.fit(X[tr.to_numpy()], ytr, sample_weight=w)
 
         g = df[df.object_id == s]
