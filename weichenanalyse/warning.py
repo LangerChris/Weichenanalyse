@@ -122,6 +122,20 @@ class EnsembleWarning:
         return out
 
 
+def alarm_active(g: pd.DataFrame, tail: int = 0) -> bool:
+    """Ist die Weiche im Alarm-Zustand?
+
+    tail=0  -> irgendwann gewarnt (sensibel, fängt auch intermittierende Vorboten).
+    tail=N  -> nur wenn in den letzten N Umläufen eine Warnung aktiv ist (Debounce:
+               "Warnung muss aktuell anhalten" → unterdrückt vereinzelte Alt-Ausreißer).
+    Erwartet eine bereits zeitlich begrenzte Teilmenge (z.B. Umläufe <= Bewertungszeit).
+    """
+    if len(g) == 0:
+        return False
+    warn = g.sort_values("time")["warn"].to_numpy()
+    return bool(warn[-tail:].any() if tail else warn.any())
+
+
 def evaluate_warnings(
     pred: pd.DataFrame, target_col: str = "is_target"
 ) -> pd.DataFrame:

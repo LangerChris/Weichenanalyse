@@ -22,7 +22,7 @@ from openpyxl import load_workbook
 
 from weichenanalyse.labels import DEFAULT_META, load_confirmed_faults, load_labeled_dataset, load_switches
 from weichenanalyse.shape import SHAPE_COLS, attach_shape_features
-from weichenanalyse.warning import EnsembleWarning
+from weichenanalyse.warning import EnsembleWarning, alarm_active
 
 # Amplitude + Umlaufzeit + Form-Merkmale (Laufphasen-Steigung, Energie, ...).
 FEATURES = ("mean_amp", "peak_amp", "turn_time", *SHAPE_COLS)
@@ -39,7 +39,7 @@ def healthy_object_ids(switches: pd.DataFrame) -> set:
     return set(sw[sw.key.isin(keys)].object_id)
 
 
-def evaluate(meta, faults, healthy, z, mc):
+def evaluate(meta, faults, healthy, z, mc, tail=0):
     ens = EnsembleWarning(features=FEATURES, z_thresh=z, min_consecutive=mc).fit(meta)
     pred = ens.predict(meta)
     pred["dt"] = pd.to_datetime(pred["time"], unit="ms")
@@ -50,19 +50,22 @@ def evaluate(meta, faults, healthy, z, mc):
             continue
         tot += 1
         g = pred[pred.object_id == r.object_id].sort_values("dt")
-        w = g[g.warn & (g.dt <= r["fd"])]
-        ok = len(w) > 0
+        upto = g[g.dt <= r["fd"]]           # Bewertung bis zum Vorfalldatum
+        ok = alarm_active(upto, tail=tail)
+        first_warn = upto[upto.warn]["dt"].min() if upto.warn.any() else None
+        lead = (r["fd"] - first_warn).days if ok and first_warn is not None else None
         hits += int(ok)
-        lead = (r["fd"] - w.dt.min()).days if ok else None
         detail.append((r["weiche"], g["signal_unit"].iloc[0] if len(g) else "?", ok, lead))
-    fa_healthy = sum(pred[pred.object_id == oid].warn.any() for oid in healthy)
+    fa_healthy = sum(alarm_active(pred[pred.object_id == oid], tail=tail) for oid in healthy)
     return hits, tot, fa_healthy, len(healthy), detail
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--z", type=float, default=2.0)
-    ap.add_argument("--min-consecutive", type=int, default=10)
+    ap.add_argument("--z", type=float, default=1.5)
+    ap.add_argument("--min-consecutive", type=int, default=5)
+    ap.add_argument("--tail", type=int, default=0,
+                    help="Debounce: Alarm nur, wenn in den letzten N Umläufen aktiv (0=aus)")
     ap.add_argument("--sweep", action="store_true")
     args = ap.parse_args()
 
@@ -77,14 +80,15 @@ def main():
     faults = faults[~faults["notiz"].astype(str).str.contains("Stein", na=False)]
 
     if args.sweep:
-        print(f"{'z':>4} {'min_run':>7} {'Recall':>10} {'Fehlalarm':>10}")
-        for z, mc in [(2.0, 10), (2.0, 5), (1.5, 5), (1.5, 3), (1.0, 3)]:
-            h, t, fh, nh, _ = evaluate(meta, faults, healthy, z, mc)
-            print(f"{z:>4} {mc:>7} {f'{h}/{t}':>10} {f'{fh}/{nh}':>10}")
+        print(f"{'z':>4} {'min_run':>7} {'tail':>5} {'Recall':>10} {'Fehlalarm':>10}")
+        for z, mc, tail in [(2.0, 10, 0), (1.5, 5, 0), (1.5, 5, 40),
+                            (1.5, 5, 20), (1.5, 3, 40)]:
+            h, t, fh, nh, _ = evaluate(meta, faults, healthy, z, mc, tail)
+            print(f"{z:>4} {mc:>7} {tail:>5} {f'{h}/{t}':>10} {f'{fh}/{nh}':>10}")
         return
 
-    h, t, fh, nh, detail = evaluate(meta, faults, healthy, args.z, args.min_consecutive)
-    print(f"Konfig: z>{args.z}, min_consecutive={args.min_consecutive}, features={FEATURES}")
+    h, t, fh, nh, detail = evaluate(meta, faults, healthy, args.z, args.min_consecutive, args.tail)
+    print(f"Konfig: z>{args.z}, min_consecutive={args.min_consecutive}, tail={args.tail}, features={FEATURES}")
     print(f"\nRecall (graduelle Störungen): {h}/{t}   |   Fehlalarm gesund: {fh}/{nh}\n")
     print(f"{'Weiche':14s} {'Unit':4s} {'gewarnt':>7s} {'Lead(d)':>7s}")
     for w, unit, ok, lead in detail:
