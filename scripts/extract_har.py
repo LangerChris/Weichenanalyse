@@ -241,6 +241,17 @@ def main():
     # Summary
     print_summary(all_turns, all_diagnoses, har_files)
 
+    # Datenqualität: HARs ohne Stromkurve (current: []) — Metadaten da, aber Signal fehlt.
+    empty_by_file = {}
+    for t in all_turns:
+        if not t.get("motor_0_current_raw"):
+            empty_by_file[t["har_file"]] = empty_by_file.get(t["har_file"], 0) + 1
+    if empty_by_file:
+        print("  ⚠ HARs OHNE Stromkurve (current leer — in DIANA Kurven vor dem HAR-Export laden!):")
+        for f, n in sorted(empty_by_file.items()):
+            print(f"      {f}: {n} Umläufe ohne Strom")
+        print()
+
     if not all_turns:
         print("No point turn data found.", file=sys.stderr)
         sys.exit(1)
