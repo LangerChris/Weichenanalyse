@@ -188,5 +188,9 @@ Ziel: diese Abweichungen unüberwacht und *früher* als DIANAs Schwellwert-Diagn
       AUC **0.79** (vorhersagbare Familie), 67 % Recall @20 % FA. Label-Qualität = großer Hebel.
 - [ ] **Verschluss-Befund vertiefen**: erkennt Modell die 2 echten Verschleißfälle nicht trotz Rohsignal
       (heterogene Signaturen, n=2)? → per-Typ-Modell oder mehr Verschluss-Verschleißfälle
-- [ ] Modellvergleich klassisch vs. Deep (1D-CNN auf der Rohkurve) ← Kandidat für nächsten Schritt
+- [x] **Modellvergleich klassisch vs. Deep** (`loso_cnn.py`, 1D-CNN auf Rohkurve): GBM 0.79 ≳ CNN 0.76
+      (vorhersagbare Familie), beide 67 % Recall @20 % FA. GBM knapp vorn (wenig Daten → Feature-Engineering);
+      CNN komplementär (Gestänge/Antrieb); Verschluss 0/2 bei beiden.
+- [ ] **GBM+CNN-Ensemble** (komplementäre Stärken kombinieren) ← Kandidat
+- [ ] **Ergebnisse konsolidieren** für Thesis (Tabellen/Plots: AUC je Modell, Recall je Typ, Vorwarnzeit)
 - [ ] Mehr/saubere Daten bleibt größter Hebel (mehr echte Verschleißfälle je Typ, breitere Vorlauf-Fenster)
