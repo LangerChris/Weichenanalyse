@@ -63,6 +63,29 @@ def load_currents(meta_path: Path = DEFAULT_META, motor: int = 0) -> dict[tuple,
     return out
 
 
+def load_signals(meta_path: Path = DEFAULT_META, motor: int = 0) -> dict[tuple, tuple]:
+    """Vereinheitlichte Wellenform je Umlauf: Strom (A) wo vorhanden, sonst Leistung (W).
+
+    Returns Mapping (object_id, time, position) -> (array, unit), unit in {"A","W",""}.
+    """
+    path = _currents_path(Path(meta_path))
+    with open(path, encoding="utf-8") as f:
+        records = json.load(f)
+    cur_col, pw_col = f"motor_{motor}_current_raw", f"motor_{motor}_power_raw"
+    out: dict[tuple, tuple] = {}
+    for r in records:
+        key = (r["object_id"], r["time"], r["position"])
+        c = r.get(cur_col) or []
+        p = r.get(pw_col) or []
+        if c:
+            out[key] = (np.asarray(c, dtype=float), "A")
+        elif p:
+            out[key] = (np.asarray(p, dtype=float), "W")
+        else:
+            out[key] = (np.array([], dtype=float), "")
+    return out
+
+
 def load_meta(meta_path: Path = DEFAULT_META) -> pd.DataFrame:
     """Metadaten-Tabelle laden und error_ids zurück in Listen wandeln."""
     df = pd.read_parquet(meta_path)

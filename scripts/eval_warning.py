@@ -21,9 +21,11 @@ import pandas as pd
 from openpyxl import load_workbook
 
 from weichenanalyse.labels import DEFAULT_META, load_confirmed_faults, load_labeled_dataset, load_switches
+from weichenanalyse.shape import SHAPE_COLS, attach_shape_features
 from weichenanalyse.warning import EnsembleWarning
 
-FEATURES = ("mean_amp", "peak_amp", "turn_time")
+# Amplitude + Umlaufzeit + Form-Merkmale (Laufphasen-Steigung, Energie, ...).
+FEATURES = ("mean_amp", "peak_amp", "turn_time", *SHAPE_COLS)
 
 
 def healthy_object_ids(switches: pd.DataFrame) -> set:
@@ -65,6 +67,7 @@ def main():
     args = ap.parse_args()
 
     meta = load_labeled_dataset(horizon=0)
+    meta = attach_shape_features(meta)
     meta["dt"] = pd.to_datetime(meta["time"], unit="ms")
     switches = load_switches()
     healthy = healthy_object_ids(switches)
