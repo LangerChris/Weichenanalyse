@@ -89,16 +89,22 @@ def parse_har(har_path: Path) -> dict:
                 motor_data = p.get("motorTurnData") or []
                 motor_summary = {}
                 for i, m in enumerate(motor_data):
-                    curr = m.get("current", [])
+                    # Eine Weiche misst entweder Strom (A) ODER Leistung (W) — beide auswerten.
+                    curr = m.get("current") or []
+                    pw = m.get("power") or []
+                    motor_summary[f"motor_{i}_id"] = m.get("idSub1", "")
+                    motor_summary[f"motor_{i}_delay_start"] = m.get("delayStartTime")
                     if curr:
-                        motor_summary[f"motor_{i}_id"] = m.get("idSub1", "")
                         motor_summary[f"motor_{i}_peak_current"] = max(curr)
                         motor_summary[f"motor_{i}_mean_current"] = sum(curr) / len(curr)
                         motor_summary[f"motor_{i}_samples"] = len(curr)
-                        motor_summary[f"motor_{i}_delay_start"] = m.get("delayStartTime")
-                    # Store raw current for model training
+                    if pw:
+                        motor_summary[f"motor_{i}_peak_power"] = max(pw)
+                        motor_summary[f"motor_{i}_mean_power"] = sum(pw) / len(pw)
+                        motor_summary[f"motor_{i}_power_samples"] = len(pw)
+                    # Store raw signals for model training
                     motor_summary[f"motor_{i}_current_raw"] = curr
-                    motor_summary[f"motor_{i}_power_raw"] = m.get("power", [])
+                    motor_summary[f"motor_{i}_power_raw"] = pw
 
                 # Error codes from this turn event
                 error_meta = p.get("errorConditionMetaIds") or {}
@@ -244,12 +250,12 @@ def main():
     # Datenqualität: HARs ohne Stromkurve (current: []) — Metadaten da, aber Signal fehlt.
     empty_by_file = {}
     for t in all_turns:
-        if not t.get("motor_0_current_raw"):
+        if not t.get("motor_0_current_raw") and not t.get("motor_0_power_raw"):
             empty_by_file[t["har_file"]] = empty_by_file.get(t["har_file"], 0) + 1
     if empty_by_file:
-        print("  ⚠ HARs OHNE Stromkurve (current leer — in DIANA Kurven vor dem HAR-Export laden!):")
+        print("  ⚠ HARs OHNE Signal (weder current noch power — in DIANA Kurven vor dem HAR-Export laden!):")
         for f, n in sorted(empty_by_file.items()):
-            print(f"      {f}: {n} Umläufe ohne Strom")
+            print(f"      {f}: {n} Umläufe ohne Signal")
         print()
 
     if not all_turns:
@@ -266,9 +272,11 @@ def main():
         print("pandas not installed. Run: uv add pandas", file=sys.stderr)
         sys.exit(1)
 
-    # Separate raw current arrays from the tabular metadata
-    meta_cols = [c for c in all_turns[0] if not c.endswith("_raw")]
-    raw_cols = [c for c in all_turns[0] if c.endswith("_raw")]
+    # Spalten über ALLE Umläufe sammeln (nicht nur den ersten — Strom- vs.
+    # Leistungs-Weichen haben unterschiedliche Spalten).
+    all_keys = dict.fromkeys(k for t in all_turns for k in t)
+    meta_cols = [c for c in all_keys if not c.endswith("_raw")]
+    raw_cols = [c for c in all_keys if c.endswith("_raw")]
 
     df_meta = pd.DataFrame([{k: v for k, v in t.items() if k in meta_cols} for t in all_turns])
     # Convert list columns to strings for tabular formats

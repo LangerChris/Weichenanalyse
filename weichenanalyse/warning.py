@@ -24,13 +24,18 @@ _MAD_TO_STD = 1.4826
 
 @dataclass
 class PersistenceWarning:
-    feature: str = "motor_0_mean_current"  # Stromstärke-Merkmal (Spalte in meta).
-    # Empirisch: der MITTELstrom kündigt Endlage-Störungen an, der Peak-Strom nicht.
+    feature: str = "mean_amp"              # Amplituden-Merkmal (Strom A oder Leistung W).
+    # Empirisch: der MITTELwert kündigt Endlage-Störungen an, der Peak nicht.
     baseline_turns: int = 50               # erste N Umläufe je Gruppe = gesunde Referenz
     z_thresh: float = 2.0                  # ab wann ein Umlauf "erhöht" zählt
     min_consecutive: int = 10              # so viele erhöhte Umläufe in Folge -> Warnung
+    min_scale_frac: float = 0.02           # MAD-Untergrenze als Anteil von |Median|
     eps: float = 1e-9
-    groups_: dict = field(default_factory=dict)  # (oid,pos) -> (median, mad_std)
+    groups_: dict = field(default_factory=dict)  # (oid,pos) -> (median, scale)
+
+    def _scale(self, med: float, mad: float) -> float:
+        # Floor verhindert explodierende z-Werte bei fast konstanten Merkmalen (z.B. Umlaufzeit).
+        return max(mad, self.min_scale_frac * abs(med), self.eps)
 
     def fit(self, meta: pd.DataFrame) -> "PersistenceWarning":
         self.groups_ = {}
@@ -43,7 +48,7 @@ class PersistenceWarning:
                 continue
             med = float(np.median(base))
             mad = float(np.median(np.abs(base - med))) * _MAD_TO_STD
-            self.groups_[tuple(key)] = (med, max(mad, self.eps))
+            self.groups_[tuple(key)] = (med, self._scale(med, mad))
         return self
 
     def predict(self, meta: pd.DataFrame) -> pd.DataFrame:
@@ -76,6 +81,44 @@ class PersistenceWarning:
             out.loc[order, "elevated"] = elevated
             out.loc[order, "run_len"] = run
             out.loc[order, "warn"] = warn
+        return out
+
+
+@dataclass
+class EnsembleWarning:
+    """Mehrere Persistenz-Warner ODER-verknüpft (maximale Trefferquote).
+
+    Politik "lieber einmal zu viel warnen": gewarnt wird, sobald IRGENDEIN Warner
+    anschlägt. Jeder Warner ist per-Weiche-relativ; reine Leistungs-Weichen werden
+    über `mean_amp`/`peak_amp` automatisch mit abgedeckt.
+    """
+
+    features: tuple[str, ...] = ("mean_amp", "peak_amp", "turn_time")
+    baseline_turns: int = 50
+    z_thresh: float = 2.0
+    min_consecutive: int = 10
+    warners_: dict = field(default_factory=dict)
+
+    def fit(self, meta: pd.DataFrame) -> "EnsembleWarning":
+        self.warners_ = {}
+        for f in self.features:
+            self.warners_[f] = PersistenceWarning(
+                feature=f, baseline_turns=self.baseline_turns,
+                z_thresh=self.z_thresh, min_consecutive=self.min_consecutive,
+            ).fit(meta)
+        return self
+
+    def predict(self, meta: pd.DataFrame) -> pd.DataFrame:
+        out = meta.copy()
+        warn_any = np.zeros(len(out), dtype=bool)
+        fired = [[] for _ in range(len(out))]
+        for f, w in self.warners_.items():
+            wf = w.predict(meta)["warn"].to_numpy()
+            warn_any |= wf
+            for i in np.where(wf)[0]:
+                fired[i].append(f)
+        out["warn"] = warn_any
+        out["warn_by"] = [",".join(x) for x in fired]
         return out
 
 

@@ -129,11 +129,28 @@ def add_target_labels(
     return out
 
 
+def unify_amplitude(meta: pd.DataFrame) -> pd.DataFrame:
+    """Einheitliches Amplituden-Signal: Strom (A) wo vorhanden, sonst Leistung (W).
+
+    Jede Weiche misst nur eine der beiden Größen. Da Warner per-Weiche-relativ (z zur
+    Eigen-Baseline) arbeiten, ist die Einheit egal — `mean_amp`/`peak_amp` vereinheitlichen
+    den Zugriff. `signal_unit` hält fest, welche Größe es war.
+    """
+    out = meta.copy()
+    mc, pc = out.get("motor_0_mean_current"), out.get("motor_0_mean_power")
+    out["mean_amp"] = mc.where(mc.notna(), pc) if mc is not None else pc
+    kc, kp = out.get("motor_0_peak_current"), out.get("motor_0_peak_power")
+    out["peak_amp"] = kc.where(kc.notna(), kp) if kc is not None else kp
+    out["signal_unit"] = np.where(out.get("motor_0_mean_current").notna(), "A", "W")
+    return out
+
+
 def load_labeled_dataset(
     meta_path: Path | str = DEFAULT_META, horizon: int = 0
 ):
-    """Bequemer Einstieg: Meta + Switch-Metadaten + Ziel-/Frühwarn-Label."""
+    """Bequemer Einstieg: Meta + Switch-Metadaten + Ziel-/Frühwarn-Label + Amplituden-Signal."""
     meta = load_meta(Path(meta_path))
     meta = add_target_labels(meta, horizon=horizon)
+    meta = unify_amplitude(meta)
     switches = load_switches(meta_path)
     return meta.merge(switches, on="object_id", how="left", suffixes=("", "_sw"))
